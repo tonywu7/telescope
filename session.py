@@ -1,9 +1,14 @@
 import asyncio
+import logging
+import mimetypes
+from pathlib import Path
+
 import aiohttp
 
 loop: asyncio.AbstractEventLoop = None
 sem: asyncio.Semaphore = None
 session: aiohttp.ClientSession = None
+log = logging.getLogger('aiohttp.session')
 
 
 def init(*, concurrency=1):
@@ -31,3 +36,19 @@ def get_semaphore():
 
 async def close_session():
     await session.close()
+
+
+async def fetch(url: str):
+    async with sem, session.get(url) as res:
+        return await res.read(), res
+
+
+async def download(url: str, filename: Path):
+    log.debug(f'Downloading {filename}')
+    data, res = await fetch(url)
+    suffix = mimetypes.guess_extension(res.content_type)
+    if suffix:
+        filename = filename.with_suffix(suffix)
+    with open(filename, 'wb+') as f:
+        f.write(data)
+    return data, res
