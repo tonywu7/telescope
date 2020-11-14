@@ -73,7 +73,7 @@ async def common(video: TwitchStream, wd,
     if chat:
         await video.load_chat()
     if thumbnail:
-        await video.load_thumbnail()
+        await video.load_thumbnail(wd)
     if not no_download:
         await video.load_stream(extended, wd)
     if save_m3u8:

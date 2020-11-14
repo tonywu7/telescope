@@ -97,10 +97,14 @@ class HLS:
             return
         log.info(f'Downloading playlist for {self.url}')
         url = self.best_stream
+        if not url:
+            return
         async with get_session().get(url) as res:
             self.m3u = m3u8.loads(await res.text(), uri=url)
 
-    def m3u_normalized(self) -> m3u8.M3U8:
+    def m3u_normalized(self) -> Optional[m3u8.M3U8]:
+        if not self.m3u:
+            return
         normalized = m3u8.M3U8()
         normalized.data.update({k: self.m3u.data[k] for k in M3U_ATTRS})
         normalized._initialize_attributes()
@@ -112,16 +116,18 @@ class HLS:
             normalized.add_segment(m3u8.Segment(**kwargs))
         return normalized
 
-    async def load_thumbnail(self):
+    async def load_thumbnail(self, out='.'):
         log.info(f'Downloading thumbnail for {self.url}')
         url = self.best_thumbnail
         if not url:
             return
-        await download(url, self.filename_thumbnail)
+        await download(url, Path(out) / self.filename_thumbnail)
 
     async def load_stream(self, out='.', stream=None):
         log.info(f'Downloading {self.filename}')
         playlist = stream or self.m3u_normalized()
+        if not playlist:
+            return
         path = Path(out) / self.filename
         if path.exists():
             overwrite = input(f'{path} already exists. Overwrite? ')
@@ -143,10 +149,9 @@ class HLS:
         log.info(f'Dumping info to {info_path}')
         info = {**self.info}
         if self.m3u:
-            info['_m3u'] = {
-                'uri': self.best_stream,
-                'content': self.m3u.dumps(),
-            }
+            m3u_dict = info.setdefault('_m3u', {})
+            m3u_dict['uri'] = self.best_stream
+            m3u_dict['content'] = self.m3u.dumps()
         with open(info_path, 'w+') as f:
             json.dump(info, f)
 
@@ -196,12 +201,38 @@ class TwitchStream(HLS):
         return normalized
 
     def scan_for_muted(self):
-        muted = {}
+        if not self.m3u:
+            return
+        muted = []
         time = 0
+        start = None
+        end = None
+        segment_before = None
+        segment_after = None
+
+        def add():
+            muted.append({
+                'start': start,
+                'end': end,
+                'before': segment_before,
+                'after': segment_after,
+            })
         for seg in self.m3u.segments:
-            if 'muted' in seg.uri:
-                muted[seg.uri] = time
+            if end is not None:
+                segment_after = seg.uri
+                add()
+                start = end = segment_before = segment_after = None
+            if start is None:
+                if 'muted' in seg.uri:
+                    start = time
+                else:
+                    segment_before = seg.uri
+            if start is not None and 'muted' not in seg.uri:
+                end = time
             time += seg.duration
+        if start is not None:
+            end = time
+            add()
         m3u_dict = self.info.setdefault('_m3u', {})
         m3u_dict['muted'] = muted
 
