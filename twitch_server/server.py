@@ -35,6 +35,9 @@ class TwitchServer(web.Application):
 
         self.twitch: TwitchApp = None
         self.add_routes([
+            web.get('/server/test', self._debug_endpoint),
+        ])
+        self.add_routes([
             web.get(
                 '/twitch/webhook/stream_changed/{user_id}', self.verify_stream_change_sub,
                 name='sub-stream-changed-get',
@@ -45,15 +48,22 @@ class TwitchServer(web.Application):
             ),
         ])
 
+        self.on_startup.append(TwitchServer.start_client)
+        self.on_cleanup.append(TwitchServer.close)
+
     def _url_for(self, endpoint, **kwargs):
         return f'{self["SERVER_ORIGIN"]}{self.router[endpoint].url_for(**kwargs)}'
+
+    async def _debug_endpoint(self, req: web.Request):
+        async with self.twitch._session.get('https://httpbin.org/ip') as res:
+            return web.Response(body=await res.text(), content_type='application/json')
 
     async def start_client(self):
         app = TwitchApp(self['CLIENT_ID'], self['CLIENT_SECRET'])
         await app.authenticate()
         self.twitch = app
 
-    async def verify_stream_change_sub(req: web.Request):
+    async def verify_stream_change_sub(self, req: web.Request):
         log = logging.getLogger('webhook.streams')
         challenge = req.query.get('hub.challenge')
         if not challenge:
@@ -64,10 +74,12 @@ class TwitchServer(web.Application):
         log.info(f'Subscription to stream change event for {req.match_info["user_id"]} verified')
         return web.Response(body=challenge, content_type='text/plain')
 
-    async def handle_stream_change(req: web.Request):
+    async def handle_stream_change(self, req: web.Request):
         return web.Response()
 
     async def subscribe_to_stream(self, user_id: int):
+        self.logger.info(f'Subscribing to {user_id}')
+
         payload = {
             'hub.callback': self._url_for('sub-stream-changed-post', user_id=user_id),
             'hub.mode': 'subscribe',

@@ -21,6 +21,8 @@
 # SOFTWARE.
 
 import asyncio
+import os
+import socket
 from pathlib import Path
 
 import click
@@ -33,11 +35,6 @@ from .server import TwitchServer
 INSTANCE = Path(__file__).parent.with_name('instance')
 
 
-async def main(server: TwitchServer, socket):
-    await server.start_client()
-    web.run_app(server, path=socket)
-
-
 async def subscribe(server: TwitchServer):
     await server.start_client()
     await server.subscribe_to_all()
@@ -45,11 +42,12 @@ async def subscribe(server: TwitchServer):
 
 
 @click.group()
+@click.option('-l', '--logfile', default=None)
 @click.option('-d', '--debug', default=False, is_flag=True)
 @click.pass_context
-def cli(ctx, debug):
+def cli(ctx, logfile, debug):
     level = 10 if debug else 20
-    _config_logging(level)
+    _config_logging(level=level, logfile=logfile)
 
     ctx.ensure_object(dict)
     ctx.obj['DEBUG'] = debug
@@ -67,10 +65,14 @@ def subscribe_to_all(ctx):
 
 
 @cli.command()
-@click.option('-s', '--socket', required=True, type=click.Path(exists=True, dir_okay=False))
+@click.option('-s', '--sock', required=True, type=click.Path(dir_okay=False))
 @click.pass_context
-def run_server(ctx, socket):
-    asyncio.run(main(ctx.obj['SERVER'], socket))
+def run_server(ctx, sock):
+    s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    os.unlink(sock)
+    s.bind(sock)
+    os.chmod(sock, 0o660)
+    web.run_app(ctx.obj['SERVER'], sock=s)
 
 
 if __name__ == '__main__':
