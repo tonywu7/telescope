@@ -215,21 +215,6 @@ logging_config_template = {
         'main': {
             'level': logging.NOTSET,
         },
-        'scrapy.core': {
-            'level': logging.NOTSET,
-        },
-        'scrapy.core.engine': {
-            'level': logging.NOTSET,
-        },
-        'scrapy.crawler': {
-            'level': logging.WARNING,
-        },
-        'scrapy.middleware': {
-            'level': logging.WARNING,
-        },
-        'twisted': {
-            'level': logging.ERROR,
-        },
     },
     'root': {
         'handlers': ['console'],

@@ -24,6 +24,18 @@ except ValueError:
     ctx = get_context('spawn')
 
 
+def _reconfig_logging():
+    _level_to_name = {
+        logging.CRITICAL: 'CRITICAL', logging.ERROR: 'ERROR', logging.WARN: 'WARNING',
+        logging.INFO: 'INFO', logging.DEBUG: 'DEBUG', 5: 'TRACE', logging.NOTSET: 'NOTSET',
+    }
+    for level, name in _level_to_name.items():
+        logging.addLevelName(level, name)
+
+
+_reconfig_logging()
+
+
 class StreamlinkFFmpeg(ctx.Process):
     def __init__(
         self, url: str, filename: Path, closing: ctx.Event,
