@@ -3,3 +3,6 @@ def _config_logging(*args, **kwargs):
 
     from .logger import make_logging_config
     dictConfig(make_logging_config('twitch_server', *args, **kwargs))
+
+    from .util import LOG_LISTENER
+    LOG_LISTENER.enable()

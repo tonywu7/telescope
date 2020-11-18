@@ -20,8 +20,20 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-import socket
+import logging
 import os
+import socket
+from logging.handlers import QueueListener
+from multiprocessing import Queue
+
+try:
+    from termcolor import colored
+except ImportError:
+    def colored(t, *args, **kwargs):
+        return t
+
+
+log = logging.getLogger('main.utils')
 
 
 def get_socket(sock: str) -> socket.socket:
@@ -30,3 +42,49 @@ def get_socket(sock: str) -> socket.socket:
     s.bind(sock)
     os.chmod(sock, 0o660)
     return s
+
+
+class RobustQueueListener(QueueListener):
+    def _monitor(self):
+        try:
+            super()._monitor()
+        except EOFError:
+            log.warning('Log listener has prematurely stopped.')
+
+
+class QueueListenerWrapper:
+    def __init__(self):
+        self.queue = None
+        self.listener = None
+
+    def enable(self):
+        if self.queue:
+            return self.queue
+        self.queue = Queue()
+        self.listener = RobustQueueListener(self.queue, *logging.getLogger().handlers, respect_handler_level=True)
+        self.listener.start()
+        return self.queue
+
+    def disable(self):
+        if not self.queue:
+            return
+        self.listener.stop()
+        self.queue = None
+        self.listener = None
+
+    def start(self):
+        if not self.listener:
+            return
+        if not self.listener._thread:
+            self.listener.start()
+        return self.queue
+
+    def stop(self):
+        if not self.listener:
+            return
+        if self.listener._thread:
+            self.listener.stop()
+        return self.queue
+
+
+LOG_LISTENER = QueueListenerWrapper()
