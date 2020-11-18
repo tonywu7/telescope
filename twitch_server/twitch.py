@@ -38,6 +38,8 @@ class TwitchApp:
         self._token: AccessToken = None
         self.log = logging.getLogger('twitch')
 
+        self.users = {}
+
     def _helix_endpoint(self, endpoint: str, data=None):
         data = data or {}
         data = URLParam(data)
@@ -81,11 +83,11 @@ class TwitchApp:
             self._token = None
 
     @asynccontextmanager
-    async def request(self, endpoint: str, *, method='GET', data=None):
+    async def request(self, endpoint: str, *, method='GET', data=None, query=True):
         self.log.info(f'Fetching {endpoint} with HTTP {method}')
 
         endpoint = self._helix_endpoint(endpoint)
-        if method == 'GET' and data:
+        if (method == 'GET' or query) and data:
             endpoint = URLParam(data).update_url(endpoint)
             data = None
 
@@ -97,7 +99,7 @@ class TwitchApp:
         async with self._session.request(
             method=method,
             url=endpoint,
-            data=data,
+            json=data,
             headers=headers,
         ) as res:
             try:
@@ -126,7 +128,10 @@ class TwitchApp:
             for info in ls:
                 params.add(k, info)
         async with self.request('/users', data=params) as res:
-            return (await self._json_response(res))['data']
+            data = (await self._json_response(res))['data']
+            for user in data:
+                self.users[user['id']] = user
+            return data
 
 
 class AccessToken:

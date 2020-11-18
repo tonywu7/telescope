@@ -23,8 +23,10 @@
 import asyncio
 import logging
 
+import aiojobs
 from aiohttp import web
 
+from .urlkit import URLParam
 from .twitch import TwitchApp
 
 
@@ -48,7 +50,11 @@ class TwitchServer(web.Application):
             ),
         ])
 
+        self.submanager = SubscriptionManager(self)
+
+        self.on_startup.append(self.submanager.create_scheduler)
         self.on_startup.append(TwitchServer.start_client)
+        self.on_cleanup.append(self.submanager.close)
         self.on_cleanup.append(TwitchServer.close)
 
     def _url_for(self, endpoint, **kwargs):
@@ -63,40 +69,56 @@ class TwitchServer(web.Application):
         await app.authenticate()
         self.twitch = app
 
+    async def list_subscriptions(self):
+        async with self.twitch.request('/webhooks/subscriptions') as res:
+            return await res.json()
+
     async def verify_stream_change_sub(self, req: web.Request):
-        log = logging.getLogger('webhook.streams')
+        if 'hub.topic' not in req.query:
+            return web.Response(status=444)
+
+        user_id = req.match_info['user_id']
         challenge = req.query.get('hub.challenge')
         if not challenge:
             reason = req.query.get('hub.reason')
-            log.error(f'Subscription to stream change event for {req.match_info["user_id"]} denied.')
-            log.error(f'Reason: {reason}')
+            self.logger.error(f'Subscription to stream change event for {user_id} denied.')
+            self.logger.error(f'Reason: {reason}')
             return web.Response(status=204)
-        log.info(f'Subscription to stream change event for {req.match_info["user_id"]} verified')
+
+        self.logger.info(f'Subscription to stream change event for {user_id} verified')
+
+        record = {k: req.query[k] for k in ('hub.lease_seconds', 'hub.topic')}
+        if user_id not in self.twitch.users:
+            await self.twitch.get_users(user_ids=[user_id])
+        await self.submanager.add(user_id, f'{self["SERVER_ORIGIN"]}{req.path}', record)
+
         return web.Response(body=challenge, content_type='text/plain')
 
     async def handle_stream_change(self, req: web.Request):
+        self.logger.info(req.url)
+        self.logger.info(req.headers)
+        self.logger.info(req.query)
         return web.Response()
 
-    async def subscribe_to_stream(self, user_id: int):
-        self.logger.info(f'Subscribing to {user_id}')
-
+    async def _subscribe(self, topic: str, callback: str, query: dict, lease: int = 86400):
+        topic = URLParam(query).update_url(topic)
         payload = {
-            'hub.callback': self._url_for('sub-stream-changed-post', user_id=user_id),
+            'hub.callback': callback,
             'hub.mode': 'subscribe',
-            'hub.topic': 'https://api.twitch.tv/helix/streams',
-            'hub.lease_seconds': 86400,
+            'hub.topic': topic,
+            'hub.lease_seconds': lease,
             'hub.secret': self['SECRET_KEY'],
         }
-
-        async with self.twitch.request(
-            'https://api.twitch.tv/helix/webhooks/hub',
-            method='POST',
-            data=payload,
-        ) as res:
+        async with self.twitch.request('/webhooks/hub', method='POST', data=payload) as res:
             if res.status != 202:
                 raise ValueError(res)
+        return {**query, **payload}
 
-        return {'user_id': user_id, **payload}
+    async def subscribe_to_stream(self, user_id: str):
+        self.logger.info(f'Subscribing to {user_id}')
+        topic = 'https://api.twitch.tv/helix/streams'
+        callback = self._url_for('sub-stream-changed-post', user_id=user_id)
+        return await self._subscribe(topic, callback, {'user_id': user_id})
 
     async def subscribe_to_all(self):
         users = {'user_ids': [], 'user_logins': []}
@@ -115,3 +137,35 @@ class TwitchServer(web.Application):
 
     async def close(self):
         await self.twitch.close()
+
+
+class SubscriptionManager:
+    def __init__(self, server: TwitchServer):
+        self.log = logging.getLogger('submanager')
+        self.server = server
+        self.scheduler: aiojobs.Scheduler = None
+        self._subscriptions = {}
+
+    async def create_scheduler(self, *args, **kwargs):
+        self.scheduler = await aiojobs.create_scheduler()
+
+    async def add(self, key, callback, info, autorenew=True):
+        self.log.info(f'Added subscription {key} {info}')
+        self._subscriptions[key] = info
+        if autorenew:
+            kwargs = {
+                'topic': info['hub.topic'],
+                'callback': callback,
+                'query': {},
+            }
+            renew_after = int(info['hub.lease_seconds'])
+            await self.scheduler.spawn(self.resubscribe(renew_after, **kwargs))
+
+    async def close(self):
+        await self.scheduler.close()
+
+    async def resubscribe(self, after: int, *args, **kwargs):
+        self.log.info(f'Subscription scheduled to renew after {after} seconds')
+        await asyncio.sleep(int(after) * .9)
+        self.log.info('Renewing subscription')
+        await self.server._subscribe(*args, **kwargs)

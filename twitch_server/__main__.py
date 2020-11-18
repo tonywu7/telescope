@@ -35,12 +35,6 @@ from .server import TwitchServer
 INSTANCE = Path(__file__).parent.with_name('instance')
 
 
-async def subscribe(server: TwitchServer):
-    await server.start_client()
-    await server.subscribe_to_all()
-    await server.close()
-
-
 @click.group()
 @click.option('-l', '--logfile', default=None)
 @click.option('-d', '--debug', default=False, is_flag=True)
@@ -59,12 +53,6 @@ def cli(ctx, logfile, debug):
 
 
 @cli.command()
-@click.pass_context
-def subscribe_to_all(ctx):
-    asyncio.run(subscribe(ctx.obj['SERVER']))
-
-
-@cli.command()
 @click.option('-s', '--sock', required=True, type=click.Path(dir_okay=False))
 @click.pass_context
 def run_server(ctx, sock):
@@ -73,6 +61,32 @@ def run_server(ctx, sock):
     s.bind(sock)
     os.chmod(sock, 0o660)
     web.run_app(ctx.obj['SERVER'], sock=s)
+
+
+@cli.command()
+@click.pass_context
+def subscribe_to_all(ctx):
+    server: TwitchServer = ctx.obj['SERVER']
+
+    async def main():
+        await server.start_client()
+        await server.subscribe_to_all()
+        await server.close()
+
+    asyncio.run(main())
+
+
+@cli.command()
+@click.pass_context
+def list_subscriptions(ctx):
+    server: TwitchServer = ctx.obj['SERVER']
+
+    async def main():
+        await server.start_client()
+        print(await server.list_subscriptions())
+        await server.close()
+
+    asyncio.run(main())
 
 
 if __name__ == '__main__':
