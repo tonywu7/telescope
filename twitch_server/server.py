@@ -67,7 +67,7 @@ class TwitchServer(web.Application):
         await self.submanager.create_scheduler()
 
     async def _debug_endpoint(self, req: web.Request):
-        return web.Response(req.remote)
+        return web.Response(body=req.remote)
 
     async def verify_stream_change_sub(self, req: web.Request):
         if 'hub.topic' not in req.query:
