@@ -21,8 +21,6 @@
 # SOFTWARE.
 
 import asyncio
-import os
-import socket
 from pathlib import Path
 
 import click
@@ -31,6 +29,7 @@ from aiohttp import web
 from . import _config_logging
 from .datastructures import Settings
 from .server import TwitchServer
+from .util import get_socket
 
 INSTANCE = Path(__file__).parent.with_name('instance')
 
@@ -46,9 +45,11 @@ def cli(ctx, logfile, debug):
     ctx.ensure_object(dict)
     ctx.obj['DEBUG'] = debug
 
-    server = TwitchServer()
-    Settings.from_json(server, INSTANCE / 'secrets.json')
-    Settings.from_pyfile(server, INSTANCE / 'settings.py')
+    config = {}
+    Settings.from_json(config, INSTANCE / 'secrets.json')
+    Settings.from_pyfile(config, INSTANCE / 'settings.py')
+
+    server = TwitchServer(config)
     ctx.obj['SERVER'] = server
 
 
@@ -56,11 +57,7 @@ def cli(ctx, logfile, debug):
 @click.option('-s', '--sock', required=True, type=click.Path(dir_okay=False))
 @click.pass_context
 def run_server(ctx, sock):
-    s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-    os.unlink(sock)
-    s.bind(sock)
-    os.chmod(sock, 0o660)
-    web.run_app(ctx.obj['SERVER'], sock=s)
+    web.run_app(ctx.obj['SERVER'], sock=get_socket(sock))
 
 
 @cli.command()
@@ -69,8 +66,8 @@ def subscribe_to_all(ctx):
     server: TwitchServer = ctx.obj['SERVER']
 
     async def main():
-        await server.start_client()
-        await server.subscribe_to_all()
+        await server.init()
+        await server.submanager.subscribe_to_all()
         await server.close()
 
     asyncio.run(main())
@@ -82,8 +79,8 @@ def list_subscriptions(ctx):
     server: TwitchServer = ctx.obj['SERVER']
 
     async def main():
-        await server.start_client()
-        print(await server.list_subscriptions())
+        await server.init()
+        print(await server.twitch.list_subscriptions())
         await server.close()
 
     asyncio.run(main())

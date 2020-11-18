@@ -31,12 +31,12 @@ from .urlkit import URLParam
 
 
 class TwitchApp:
-    def __init__(self, client_id: str, secret: str = None, *args, **kwargs):
-        self._id = client_id
-        self._secret = secret
+    def __init__(self, config, *args, **kwargs):
+        self.config = config
+        self.log = logging.getLogger('twitch')
+
         self._session = aiohttp.ClientSession()
         self._token: AccessToken = None
-        self.log = logging.getLogger('twitch')
 
         self.users = {}
 
@@ -63,8 +63,8 @@ class TwitchApp:
         async with self._session.post(
             url='https://id.twitch.tv/oauth2/token',
             data={
-                'client_id': self._id,
-                'client_secret': self._secret,
+                'client_id': self.config['CLIENT_ID'],
+                'client_secret': self.config['CLIENT_SECRET'],
                 'grant_type': 'client_credentials',
             },
         ) as res:
@@ -76,7 +76,7 @@ class TwitchApp:
         async with self._session.post(
             url='https://id.twitch.tv/oauth2/revoke',
             data={
-                'client_id': self._id,
+                'client_id': self.config['CLIENT_ID'],
                 'token': self.access_token,
             },
         ):
@@ -84,7 +84,7 @@ class TwitchApp:
 
     @asynccontextmanager
     async def request(self, endpoint: str, *, method='GET', data=None, query=True):
-        self.log.info(f'Fetching {endpoint} with HTTP {method}')
+        self.log.debug(f'Fetching {endpoint} with HTTP {method}')
 
         endpoint = self._helix_endpoint(endpoint)
         if (method == 'GET' or query) and data:
@@ -93,14 +93,12 @@ class TwitchApp:
 
         headers = {
             'Authorization': f'Bearer {self.access_token}',
-            'client-id': self._id,
+            'client-id': self.config['CLIENT_ID'],
         }
 
         async with self._session.request(
-            method=method,
-            url=endpoint,
-            json=data,
-            headers=headers,
+            method=method, url=endpoint,
+            json=data, headers=headers,
         ) as res:
             try:
                 yield res
@@ -132,6 +130,10 @@ class TwitchApp:
             for user in data:
                 self.users[user['id']] = user
             return data
+
+    async def list_subscriptions(self):
+        async with self.request('/webhooks/subscriptions') as res:
+            return await res.json()
 
 
 class AccessToken:
