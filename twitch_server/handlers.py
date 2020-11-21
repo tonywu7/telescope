@@ -22,9 +22,7 @@
 
 import logging
 from typing import Dict
-from urllib.parse import urlunsplit
 
-import aiohttp
 import pendulum
 import simplejson as json
 from aiohttp import web
@@ -37,23 +35,6 @@ log = logging.getLogger('handler')
 
 async def test_webhook(req: web.Request, data: Dict[str, str], server: web.Application):
     log.info(data)
-
-
-async def relay(req: web.Request, data: Dict[str, str], server: web.Application):
-    sig = req.headers.get('X-Hub-Signature')
-    msg_id = req.headers.get('Twitch-Notification-Id')
-
-    remote_loc = server['SUBNET_LOCATION']
-    remote_url = urlunsplit(['http', remote_loc, req.path, '', ''])
-    headers = {'X-Hub-Signature': sig, 'Twitch-Notification-Id': msg_id}
-
-    log.info(f'Relaying notification to {remote_loc}')
-    try:
-        async with aiohttp.ClientSession() as session:
-            async with session.post(url=remote_url, data=await req.read(), headers=headers) as res:
-                return res
-    except aiohttp.ClientConnectionError as e:
-        log.error('Cannot connect to local machine.', exc_info=e)
 
 
 async def streamlink_start(req: web.Request, data: Dict[str, str], server: web.Application):

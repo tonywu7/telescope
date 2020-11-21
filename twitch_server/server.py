@@ -26,9 +26,11 @@ from operator import itemgetter
 
 import simplejson as json
 from aiohttp import web
+from aiohttp_remotes import XForwardedRelaxed, setup
 
 from .subscription import SubscriptionManager
 from .twitch import TwitchApp
+from .util import colored as _
 
 
 class TwitchServer(web.Application):
@@ -58,13 +60,18 @@ class TwitchServer(web.Application):
         self.notifications = {}
 
         self.on_startup.append(self.init)
+        self.on_startup.append(self.startup)
         self.on_cleanup.append(self.close)
 
     async def init(self, *args, **kwargs):
+        await setup(self, XForwardedRelaxed())
         self.twitch = TwitchApp(self)
         self.submanager = SubscriptionManager(self, self.twitch, self.router)
         await self.twitch.authenticate()
         await self.submanager.create_scheduler()
+
+    async def startup(self, *args, **kwargs):
+        await self.submanager.subscribe_to_all()
 
     async def _debug_endpoint(self, req: web.Request):
         return web.Response(body=req.remote)
@@ -116,7 +123,7 @@ class TwitchServer(web.Application):
         data = data[0]
 
         user_id, user_name = self.STREAM_CHANGE_NOTIF(data)
-        self.logger.info(f'{user_name} is live!')
+        self.logger.info(_(f'{user_name} is live!', color='green', attrs=['bold']))
 
         handlers = self['SUBSCRIPTIONS']
         handler = handlers.get(('id', user_id), handlers.get(('login', user_name)))

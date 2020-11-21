@@ -59,7 +59,7 @@ class TwitchApp:
         await self._session.close()
 
     async def authenticate(self):
-        self.log.info('Obtaining an access token ...')
+        self.log.info('Obtaining access token ...')
         async with self._session.post(
             url='https://id.twitch.tv/oauth2/token',
             data={

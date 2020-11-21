@@ -88,7 +88,7 @@ def list_subscriptions(ctx):
 
     async def main():
         await server.init()
-        print(await server.twitch.list_subscriptions())
+        server.logger.info(await server.twitch.list_subscriptions())
         await server.close()
 
     asyncio.run(main())
