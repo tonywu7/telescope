@@ -25,6 +25,7 @@ import logging
 from operator import itemgetter
 
 import simplejson as json
+import pendulum
 from aiohttp import web
 from aiohttp_remotes import XForwardedRelaxed, setup
 
@@ -35,6 +36,7 @@ from .util import colored as _
 
 class TwitchServer(web.Application):
     STREAM_CHANGE_NOTIF = itemgetter('user_id', 'user_name')
+    STREAM_CHANGE_INFO = itemgetter('title', 'game_id', 'viewer_count', 'started_at')
 
     def __init__(self, config, *args, logger=None, **kwargs):
         logger = logger or logging.getLogger('twitch_server')
@@ -60,18 +62,16 @@ class TwitchServer(web.Application):
         self.notifications = {}
 
         self.on_startup.append(self.init)
-        self.on_startup.append(self.startup)
         self.on_cleanup.append(self.close)
 
-    async def init(self, *args, **kwargs):
+    async def init(self, subscribe=True, *args, **kwargs):
         await setup(self, XForwardedRelaxed())
         self.twitch = TwitchApp(self)
         self.submanager = SubscriptionManager(self, self.twitch, self.router)
         await self.twitch.authenticate()
         await self.submanager.create_scheduler()
-
-    async def startup(self, *args, **kwargs):
-        await self.submanager.subscribe_to_all()
+        if subscribe:
+            await self.submanager.subscribe_to_all()
 
     async def _debug_endpoint(self, req: web.Request):
         return web.Response(body=req.remote)
@@ -124,6 +124,21 @@ class TwitchServer(web.Application):
 
         user_id, user_name = self.STREAM_CHANGE_NOTIF(data)
         self.logger.info(_(f'{user_name} is live!', color='green', attrs=['bold']))
+
+        try:
+            title, game_id, viewer_count, started_at = self.STREAM_CHANGE_INFO(data)
+            games = await self.twitch.get_games(game_ids=[game_id])
+            if games:
+                self.logger.info(_(f'{user_name} is playing {games[0]["name"]}', color='magenta', attrs=['bold']))
+            self.logger.info(_(f'Streaming "{title}" with {viewer_count} viewers', color='magenta', attrs=['bold']))
+            timestamp = pendulum.parse(started_at)
+            pt = timestamp.in_timezone('America/Los_Angeles')
+            et = timestamp.in_timezone('America/New_York')
+            diff = pendulum.now() - et
+            self.logger.info(_(f'Stream started at {pt.to_time_string()} PT, {et.to_time_string()} ET', color='blue', attrs=['bold']))
+            self.logger.info(_(f'({diff.as_interval().in_words()} ago)', color='blue', attrs=['bold']))
+        except Exception:
+            self.logger.debug('Failed to obtain stream details')
 
         handlers = self['SUBSCRIPTIONS']
         handler = handlers.get(('id', user_id), handlers.get(('login', user_name)))

@@ -75,7 +75,6 @@ def subscribe_to_all(ctx):
 
     async def main():
         await server.init()
-        await server.submanager.subscribe_to_all()
         await server.close()
 
     asyncio.run(main())
@@ -87,7 +86,7 @@ def list_subscriptions(ctx):
     server: TwitchServer = ctx.obj['SERVER']
 
     async def main():
-        await server.init()
+        await server.init(subscribe=False)
         server.logger.info(await server.twitch.list_subscriptions())
         await server.close()
 

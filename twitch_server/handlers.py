@@ -40,7 +40,7 @@ async def test_webhook(req: web.Request, data: Dict[str, str], server: web.Appli
 async def streamlink_start(req: web.Request, data: Dict[str, str], server: web.Application):
     user_name = data['user_name']
     url = f'https://twitch.tv/{user_name}'
-    timestamp = pendulum.parse(data['started_at'])
+    timestamp = pendulum.now()
     file_name = server['OUTPUT_PATH'] / f'{user_name}-{timestamp.strftime("%y%m%d.%H%M%S")}.mp4'
 
     with open(file_name.with_suffix('.json'), 'w+') as f:

@@ -131,6 +131,13 @@ class TwitchApp:
                 self.users[user['id']] = user
             return data
 
+    async def get_games(self, *, game_ids: List[int]):
+        params = URLParam()
+        for gid in game_ids:
+            params.add('id', gid)
+        async with self.request('/games', data=params) as res:
+            return (await self._json_response(res))['data']
+
     async def list_subscriptions(self):
         async with self.request('/webhooks/subscriptions') as res:
             return await res.json()
