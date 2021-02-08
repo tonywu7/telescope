@@ -24,8 +24,8 @@ import hmac
 import logging
 from operator import itemgetter
 
-import simplejson as json
 import pendulum
+import simplejson as json
 from aiohttp import web
 from aiohttp_remotes import XForwardedRelaxed, setup
 
@@ -63,6 +63,8 @@ class TwitchServer(web.Application):
 
         self.on_startup.append(self.init)
         self.on_cleanup.append(self.close)
+
+        self.inprogress = {}
 
     async def init(self, subscribe=True, *args, **kwargs):
         await setup(self, XForwardedRelaxed())
@@ -125,6 +127,10 @@ class TwitchServer(web.Application):
         user_id, user_name = self.STREAM_CHANGE_NOTIF(data)
         self.logger.info(_(f'{user_name} is live!', color='green', attrs=['bold']))
 
+        file_name = self['OUTPUT_PATH'] / f'{user_name}-{pendulum.now().strftime("%y%m%d.%H%M%S")}.json'
+        with open(file_name, 'w+') as f:
+            json.dump(data, f)
+
         try:
             title, game_id, viewer_count, started_at = self.STREAM_CHANGE_INFO(data)
             games = await self.twitch.get_games(game_ids=[game_id])
@@ -141,12 +147,18 @@ class TwitchServer(web.Application):
             self.logger.debug('Failed to obtain stream details')
 
         handlers = self['SUBSCRIPTIONS']
-        handler = handlers.get(('id', user_id), handlers.get(('login', user_name)))
+        handler = handlers.get(('id', int(user_id)), handlers.get(('login', user_name.lower())))
 
         if not handlers:
             self.logger.warn(f'No handler for user {user_name} ({user_id})')
             return web.Response(status=204)
 
+        stream_id = data['id']
+        if stream_id in self.inprogress:
+            self.logger.info(f'Stream {stream_id} has already started.')
+            return web.Response(status=204)
+
+        self.inprogress[stream_id] = data
         try:
             await handler(req, data, self)
         except Exception as e:

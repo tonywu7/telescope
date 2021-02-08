@@ -24,7 +24,6 @@ import logging
 from typing import Dict
 
 import pendulum
-import simplejson as json
 from aiohttp import web
 
 from twitch_server.stream import StreamlinkFFmpeg, ctx
@@ -41,10 +40,7 @@ async def streamlink_start(req: web.Request, data: Dict[str, str], server: web.A
     user_name = data['user_name']
     url = f'https://twitch.tv/{user_name}'
     timestamp = pendulum.now()
-    file_name = server['OUTPUT_PATH'] / f'{user_name}-{timestamp.strftime("%y%m%d.%H%M%S")}.mp4'
-
-    with open(file_name.with_suffix('.json'), 'w+') as f:
-        json.dump(data, f)
+    file_name = server['OUTPUT_PATH'] / f'{user_name}-{timestamp.strftime("%y%m%d.%H%M%S")}.mts'
 
     log_queue = LOG_LISTENER.start()
     err_queue = ctx.Queue()

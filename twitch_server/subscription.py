@@ -93,7 +93,7 @@ class SubscriptionManager:
             await self.scheduler.spawn(self.resubscribe(renew_after, **kwargs))
 
     async def resubscribe(self, after: int, *args, **kwargs):
-        self.log.info(f'Subscription scheduled to renew after {after} seconds')
+        self.log.info(f'Subscription scheduled to renew in {after} seconds')
         await asyncio.sleep(int(after) * .9)
         self.log.info('Renewing subscription')
         await self._subscribe(*args, **kwargs)
