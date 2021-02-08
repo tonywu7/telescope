@@ -21,27 +21,10 @@
 # SOFTWARE.
 
 import logging
-import os
-import socket
 from logging.handlers import QueueListener
 from multiprocessing import Queue
 
-try:
-    from termcolor import colored
-except ImportError:
-    def colored(t, *args, **kwargs):
-        return t
-
-
 log = logging.getLogger('main.utils')
-
-
-def get_socket(sock: str) -> socket.socket:
-    s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-    os.unlink(sock)
-    s.bind(sock)
-    os.chmod(sock, 0o660)
-    return s
 
 
 class RobustQueueListener(QueueListener):

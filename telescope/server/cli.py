@@ -26,36 +26,20 @@ from pathlib import Path
 import click
 from aiohttp import web
 
-from . import _config_logging
-from .datastructures import Settings
+from ..util.sockets import get_socket
 from .server import TwitchServer
-from .util import get_socket
 
 INSTANCE = Path(__file__).parent.with_name('instance')
 
 
 @click.group()
-@click.option('-i', '--profile', required=True)
-@click.option('-l', '--logfile', default=None)
-@click.option('-d', '--debug', default=False, is_flag=True)
 @click.pass_context
-def cli(ctx, profile, logfile, debug):
-    level = 10 if debug else 20
-    _config_logging(level=level, logfile=logfile)
-
-    ctx.ensure_object(dict)
-    ctx.obj['DEBUG'] = debug
-
-    config = {}
-    Settings.from_json(config, INSTANCE / 'secrets.json')
-    Settings.from_pyfile(config, INSTANCE / 'settings.py')
-    Settings.from_pyfile(config, INSTANCE / f'{profile}.py')
-
-    server = TwitchServer(config)
+def server(ctx):
+    server = TwitchServer(ctx.obj['CONFIG'])
     ctx.obj['SERVER'] = server
 
 
-@cli.command()
+@server.command()
 @click.option('-p', '--port', type=click.INT, default=8081)
 @click.option('-s', '--sock', type=click.Path(dir_okay=False))
 @click.pass_context
@@ -68,7 +52,7 @@ def run_server(ctx, port: 8081, sock=None):
     web.run_app(ctx.obj['SERVER'], port=port, sock=sock)
 
 
-@cli.command()
+@server.command()
 @click.pass_context
 def subscribe_to_all(ctx):
     server: TwitchServer = ctx.obj['SERVER']
@@ -80,7 +64,7 @@ def subscribe_to_all(ctx):
     asyncio.run(main())
 
 
-@cli.command()
+@server.command()
 @click.pass_context
 def list_subscriptions(ctx):
     server: TwitchServer = ctx.obj['SERVER']
@@ -93,5 +77,4 @@ def list_subscriptions(ctx):
     asyncio.run(main())
 
 
-if __name__ == '__main__':
-    cli()
+COMMANDS = [server]

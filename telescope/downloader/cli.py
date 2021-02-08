@@ -1,22 +1,33 @@
+# Copyright 2021 Tony Wu +https://github.com/tonywu7/
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import asyncio
 from pathlib import Path
 
 import click
 import simplejson as json
 
-from . import _config_logging
 from .session import close_session, init
 from .stream import TwitchStream
 
 
 @click.group()
-@click.option('-d', '--debug', default=False, is_flag=True)
-def cli(debug):
-    level = 10 if debug else 20
-    _config_logging(level)
+def downloader():
+    pass
 
 
-@cli.command()
+@downloader.command()
 @click.argument('url')
 @click.option('-o', '--output', default='.', type=click.Path(exists=True, file_okay=False))
 @click.option('-n', '--no-download', default=False, is_flag=True)
@@ -29,7 +40,7 @@ def download(url, output, **kwargs):
     asyncio.run(run_download(url, output, **kwargs))
 
 
-@cli.command()
+@downloader.command()
 @click.argument('info')
 @click.option('-o', '--output', default='.', type=click.Path(exists=True, file_okay=False))
 @click.option('-n', '--no-download', default=False, is_flag=True)
@@ -81,5 +92,4 @@ async def common(video: TwitchStream, wd,
         video.m3u_normalized(extended).dump(video.filename_m3u_norm)
 
 
-if __name__ == '__main__':
-    cli()
+COMMANDS = [downloader]

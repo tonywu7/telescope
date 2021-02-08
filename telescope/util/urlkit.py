@@ -1,6 +1,6 @@
 # MIT License
 #
-# Copyright (c) 2020 Tony Wu <tony[dot]wu(at)nyu[dot]edu>
+# Copyright (c) 2021 Tony Wu +https://github.com/tonywu7/
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -20,6 +20,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+from pathlib import Path
 from typing import Dict, List
 from urllib.parse import parse_qs, quote, urlsplit, urlunsplit
 
@@ -46,3 +47,9 @@ class URLParam(MultiDict):
         query = URLParam.from_parse_qs(parse_qs(urlp.query))
         query.update(self)
         return urlunsplit([*urlp[:3], query.query_string(), *urlp[4:]])
+
+
+def url_path_op(url: str, func, *args, **kwargs) -> str:
+    urlp = urlsplit(url)
+    path = func(Path(urlp.path), *args, **kwargs)
+    return urlunsplit((*urlp[:2], str(path), *urlp[3:]))

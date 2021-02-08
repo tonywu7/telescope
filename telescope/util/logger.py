@@ -1,6 +1,6 @@
 # MIT License
 #
-# Copyright (c) 2020 Tony Wu <tony[dot]wu(at)nyu[dot]edu>
+# Copyright (c) 2021 Tony Wu +https://github.com/tonywu7/
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -20,23 +20,26 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+import io
 import logging
 import sys
+from contextlib import contextmanager
 from typing import Dict, Union
 
 try:
-    import termcolor
-    _ = termcolor.colored
+    from termcolor import colored
 except ImportError:
-    _ = None
+    def colored(t, *args, **kwargs):
+        return t
 
-try:
-    import platform
-    if platform.system() == 'Windows':
-        import colorama
-        colorama.init()
-except ImportError:
-    _ = None
+
+# try:
+#     import platform
+#     if platform.system() == 'Windows':
+#         import colorama
+#         colorama.init()
+# except ImportError:
+#     _ = None
 
 
 def compose_mappings(*mappings):
@@ -75,7 +78,20 @@ class _ColoredFormatter(logging.Formatter):
 
     def format(self, record):
         color_args = self.termcolor_args(self, record)
-        return _(super().format(record), *color_args)
+        return colored(super().format(record), *color_args)
+
+
+class _TruncatedFormatter(_ColoredFormatter):
+    def __init__(self, length=140, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.length = length
+
+    def format(self, record):
+        msg = super().format(record)
+        if len(msg) > self.length:
+            msg = msg[:self.length - 3] + '...'
+        color_args = self.termcolor_args(self, record)
+        return colored(msg, *color_args)
 
 
 class _CascadingFormatter(logging.Formatter):
@@ -141,64 +157,52 @@ FMT_LOGGER = '[%(processName)s:%(name)s]'
 FMT_SOURCE = '(%(module)s.%(funcName)s:%(lineno)d)'
 
 formatter_styles = {
-    'standard': {
-        'normal': {
-            'format': f'{FMT_PREFIX} {FMT_LOGGER} %(message)s',
-        },
-        'colored': {
-            '()': _CascadingFormatter.from_config,
-            'sections': '%(prefix)s %(name)s %(message)s',
-            'stylesheet': {
-                'prefix': {
-                    '()': _ColoredFormatter,
-                    'fmt': FMT_PREFIX,
-                    'color': _conditional_color('levelname', LOG_LEVEL_PREFIX_COLORS),
-                },
-                'name': {
-                    '()': _ColoredFormatter,
-                    'fmt': FMT_LOGGER,
-                    'color': 'blue',
-                },
-                'message': {
-                    '()': _ColoredFormatter,
-                    'fmt': '%(message)s',
-                    'color': _color_stacktrace,
-                },
-            },
-            'stacktrace': 'message',
-        },
+    'normal': {
+        'format': f'{FMT_PREFIX} {FMT_LOGGER} %(message)s',
     },
-    'debug': {
-        'normal': {
-            'format': f'{FMT_PREFIX} {FMT_LOGGER}{FMT_SOURCE}  %(message)s',
-        },
-        'colored': {
-            '()': _CascadingFormatter.from_config,
-            'sections': '%(prefix)s %(name)s%(source)s  %(message)s',
-            'stylesheet': {
-                'prefix': {
-                    '()': _ColoredFormatter,
-                    'fmt': FMT_PREFIX,
-                    'color': _conditional_color('levelname', LOG_LEVEL_PREFIX_COLORS_DEBUG),
-                },
-                'name': {
-                    '()': _ColoredFormatter,
-                    'fmt': FMT_LOGGER,
-                    'color': 'blue',
-                },
-                'source': {
-                    '()': _ColoredFormatter,
-                    'fmt': FMT_SOURCE,
-                    'color': 'cyan',
-                },
-                'message': {
-                    '()': _ColoredFormatter,
-                    'fmt': '%(message)s',
-                    'color': _color_stacktrace,
-                },
+    'colored': {
+        '()': _CascadingFormatter.from_config,
+        'sections': '%(prefix)s %(name)s %(message)s',
+        'stylesheet': {
+            'prefix': {
+                '()': _ColoredFormatter,
+                'fmt': FMT_PREFIX,
+                'color': _conditional_color('levelname', LOG_LEVEL_PREFIX_COLORS),
             },
-            'stacktrace': 'message',
+            'name': {
+                '()': _ColoredFormatter,
+                'fmt': FMT_LOGGER,
+                'color': 'blue',
+            },
+            'message': {
+                '()': _ColoredFormatter,
+                'fmt': '%(message)s',
+                'color': _color_stacktrace,
+            },
         },
+        'stacktrace': 'message',
+    },
+    'colored-truncated': {
+        '()': _CascadingFormatter.from_config,
+        'sections': '%(prefix)s %(name)s %(message)s',
+        'stylesheet': {
+            'prefix': {
+                '()': _TruncatedFormatter,
+                'fmt': FMT_PREFIX,
+                'color': _conditional_color('levelname', LOG_LEVEL_PREFIX_COLORS),
+            },
+            'name': {
+                '()': _TruncatedFormatter,
+                'fmt': FMT_LOGGER,
+                'color': 'blue',
+            },
+            'message': {
+                '()': _TruncatedFormatter,
+                'fmt': '%(message)s',
+                'color': _color_stacktrace,
+            },
+        },
+        'stacktrace': 'message',
     },
 }
 
@@ -215,21 +219,6 @@ logging_config_template = {
         'main': {
             'level': logging.NOTSET,
         },
-        'scrapy.core': {
-            'level': logging.NOTSET,
-        },
-        'scrapy.core.engine': {
-            'level': logging.NOTSET,
-        },
-        'scrapy.crawler': {
-            'level': logging.WARNING,
-        },
-        'scrapy.middleware': {
-            'level': logging.WARNING,
-        },
-        'twisted': {
-            'level': logging.ERROR,
-        },
     },
     'root': {
         'handlers': ['console'],
@@ -239,12 +228,10 @@ logging_config_template = {
 
 def make_logging_config(
     app_name, *overrides, level=logging.INFO,
-    style='standard', colored=True, datefmt=None,
-    logfile=None, **kwargs,
+    style='colored', logfile=None, **kwargs,
 ):
-    color_mode = 'colored' if colored and _ else 'normal'
     if style in formatter_styles:
-        formatter = formatter_styles[style][color_mode]
+        formatter = formatter_styles[style]
     else:
         formatter = style
 
@@ -287,24 +274,10 @@ def make_logging_config(
             },
         }
 
-    datefmt_config = {}
-    if datefmt:
-        datefmt_config = {
-            'formatters': {
-                'default_fmt': {
-                    'datefmt': datefmt,
-                },
-                'no_color': {
-                    'datefmt': datefmt,
-                },
-            },
-        }
-
     log_config = compose_mappings(
         logging_config_template,
         app_logging_config,
         file_handler_config,
-        datefmt_config,
         *overrides,
     )
     return log_config
@@ -319,3 +292,46 @@ class _LoggingParticipant:
             self.log.disabled = True
         else:
             raise NotImplementedError('_logger_name is not defined')
+
+
+def set_datefmt(logger, fmt):
+    for h in logger.handlers:
+        f = h.formatter
+        if isinstance(f, _CascadingFormatter):
+            f.stylesheet['prefix'].datefmt = fmt
+
+
+def config_logging(*args, **kwargs):
+    from logging.config import dictConfig
+
+    dictConfig(make_logging_config('telescope', *args, **kwargs))
+
+    from . import LOG_LISTENER
+    LOG_LISTENER.enable()
+
+
+def get_formatter(name):
+    config = {**formatter_styles[name]}
+    try:
+        initializer = config.pop('()')
+        return initializer(**config)
+    except KeyError:
+        return logging.Formatter(config['format'])
+
+
+@contextmanager
+def log_to_string(logger_name, *filters):
+    fmt = get_formatter('normal')
+    logger = logging.getLogger(logger_name)
+
+    with io.StringIO() as stream:
+        handler = logging.StreamHandler(stream)
+        handler.setFormatter(fmt)
+        for f in filters:
+            handler.addFilter(f)
+        logger.addHandler(handler)
+        logger.propagate = False
+        try:
+            yield logger, stream
+        finally:
+            logger.removeHandler(handler)
