@@ -1,0 +1,39 @@
+# audio-offset-finder
+#
+# Copyright (c) 2014 British Broadcasting Corporation
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import argparse
+from audio_offset_finder.audio_offset_finder import find_offset
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description='Find the offset of an audio file within another one',
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    parser.add_argument('--find-offset-of', metavar='audio file', type=str, help='Find the offset of file')
+    parser.add_argument('--within', metavar='audio file', type=str, help='Within file')
+    parser.add_argument('--sr', metavar='sample rate', type=int, default=8000, help='Target sample rate during downsampling')
+    parser.add_argument('--trim', metavar='seconds', type=int, default=60 * 15, help='Only uses first n seconds of audio files')
+    args = parser.parse_args()
+    if not (args.find_offset_of or args.within):
+        parser.error('Please input audio files')
+    offset, score = find_offset(args.within, args.find_offset_of, args.sr, args.trim)
+    print('Offset: %s (seconds)' % str(offset))
+    print('Standard score: %s' % str(score))
+
+
+if __name__ == '__main__':
+    main()
