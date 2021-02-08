@@ -13,11 +13,13 @@
 # limitations under the License.
 
 import asyncio
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 import click
 import simplejson as json
 
+from .postprocess import extend_stream
 from .session import close_session, init
 from .stream import TwitchStream
 
@@ -37,7 +39,14 @@ def downloader():
 @click.option('-e', '--extended', default=False, is_flag=True)
 def download(url, output, **kwargs):
     output = Path(output)
-    asyncio.run(run_download(url, output, **kwargs))
+
+    async def run_download():
+        async with run_session():
+            video: TwitchStream = await TwitchStream.from_url(url)
+            await common(video, output, **kwargs)
+            video.dump(output)
+
+    asyncio.run(run_download())
 
 
 @downloader.command()
@@ -52,26 +61,34 @@ def load(info, output, **kwargs):
     output = Path(output)
     with open(info) as f:
         info = json.load(f)
+
+    async def run_load_info():
+        async with run_session():
+            video: TwitchStream = TwitchStream(info)
+            await video.load_m3u()
+            await common(video, output, **kwargs)
+            video.dump(output)
+
     asyncio.run(run_load_info(info, output, **kwargs))
 
 
-async def run_download(url, wd, *args, **kwargs):
-    init(concurrency=32)
-    try:
-        video: TwitchStream = await TwitchStream.from_url(url)
-        await common(video, wd, **kwargs)
-        video.dump(wd)
-    finally:
-        await close_session()
+@downloader.command()
+@click.argument('url')
+@click.option('-s', '--segments', required=True, type=click.Path(exists=True, file_okay=False))
+@click.option('-o', '--output', required=False, type=click.Path(exists=False, dir_okay=False))
+def complete(url, segments, output=None):
+    async def run_postprocess():
+        async with run_session():
+            await extend_stream(url, segments, output)
+
+    asyncio.run(run_postprocess())
 
 
-async def run_load_info(info, wd, *args, **kwargs):
+@asynccontextmanager
+async def run_session():
     init(concurrency=32)
     try:
-        video: TwitchStream = TwitchStream(info)
-        await video.load_m3u()
-        await common(video, wd, **kwargs)
-        video.dump(wd)
+        yield
     finally:
         await close_session()
 

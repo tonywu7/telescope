@@ -1,6 +1,6 @@
 `telescope`: Main Authors:
 
-    Tony Wu <tony[dot]wu(at)nyu[dot]edu>
+    Tony Wu +https://github.com/tonywu7
 
 ---
 

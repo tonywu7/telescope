@@ -12,10 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import asyncio
 import logging
 import re
 import subprocess
+from asyncio.subprocess import create_subprocess_exec as run_async
 from pathlib import Path
 from typing import List, Optional
 
@@ -148,15 +148,7 @@ class HLS:
             overwrite = input(f'{path} already exists. Overwrite? ')
             if not overwrite or overwrite.lower()[0] != 'y':
                 return
-        proc = await asyncio.create_subprocess_exec(
-            'ffmpeg', *['-y', '-protocol_whitelist', 'file,http,https,tcp,tls,pipe', '-i', 'pipe:',
-                        '-c', 'copy', '-bsf:a', 'aac_adtstoasc', '-f', 'mp4', str(path)],
-            stdin=subprocess.PIPE,
-        )
-        proc.stdin.write(playlist.dumps().encode())
-        proc.stdin.close()
-        await proc.stdin.drain()
-        await proc.wait()
+        await self.pipe_stream(playlist, path, '-c', 'copy', '-bsf:a', 'aac_adtstoasc', '-f', 'mp4')
         log.info(f'Finished downloading {self.filename}')
 
     def dump(self, output: Path):
@@ -174,6 +166,16 @@ class HLS:
     def get_info(url: str) -> JSONDict:
         log.info(f'Extracting info from {url}')
         return ytdl.extract_info(url, download=False)
+
+    @staticmethod
+    async def pipe_stream(stream: m3u8.M3U8, output: Path, *ffargs):
+        proc = await run_async('ffmpeg', *['-y', '-protocol_whitelist', 'file,http,https,tcp,tls,pipe',
+                                           '-i', 'pipe:', *ffargs, str(output)],
+                               stdin=subprocess.PIPE)
+        proc.stdin.write(stream.dumps().encode())
+        proc.stdin.close()
+        await proc.stdin.drain()
+        await proc.wait()
 
 
 class TwitchStream(HLS):
