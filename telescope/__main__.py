@@ -37,7 +37,14 @@ def main(ctx, profile, logfile, debug):
     ctx.obj['DEBUG'] = debug
 
     config = {}
-    Settings.from_json(config, INSTANCE / 'secrets.json')
+    try:
+        Settings.from_json(config, INSTANCE / 'secrets.json')
+    except FileNotFoundError:
+        pass
+    try:
+        Settings.from_pyfile(config, INSTANCE / 'secrets.py')
+    except FileNotFoundError:
+        pass
     Settings.from_pyfile(config, INSTANCE / 'settings.py')
     if profile:
         Settings.from_pyfile(config, INSTANCE / f'{profile}.py')
