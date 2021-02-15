@@ -19,7 +19,6 @@ import pendulum
 from aiohttp import web
 
 from ..util import LOG_LISTENER
-from .stream import StreamlinkFFmpeg, ctx
 
 log = logging.getLogger('handler')
 
@@ -29,6 +28,7 @@ async def test_webhook(req: web.Request, data: Dict[str, str], server: web.Appli
 
 
 async def streamlink_start(req: web.Request, data: Dict[str, str], server: web.Application):
+    from .stream import StreamlinkFFmpeg, ctx
     user_name = data['user_name']
     url = f'https://twitch.tv/{user_name}'
     timestamp = pendulum.now()

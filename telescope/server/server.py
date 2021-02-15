@@ -132,7 +132,7 @@ class TwitchServer(web.Application):
             timestamp = pendulum.parse(started_at)
             pt = timestamp.in_timezone('America/Los_Angeles')
             et = timestamp.in_timezone('America/New_York')
-            diff = pendulum.now() - et
+            diff = pendulum.now().in_timezone('UTC') - timestamp
             self.logger.info(_(f'Stream started at {pt.to_time_string()} PT, {et.to_time_string()} ET', color='blue', attrs=['bold']))
             self.logger.info(_(f'({diff.as_interval().in_words()} ago)', color='blue', attrs=['bold']))
         except Exception:
